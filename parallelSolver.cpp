@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <vector>
 #include "mpi.h"
+#include <cmath>
 
 using namespace std;
-int const size=6;
+int const size=66;
 
 //function prototypes
 void createGrid(int, double grid[][size]);
@@ -19,45 +20,65 @@ void sendDots(double newGrid[][size], int);
 void receiveDots(double newGrid[][size], double temp[][size], int);
 void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int, int);
 void updateBlackDotsOnRootProcess(double newGrid[][size], double temp[][size], int, int);
+void copyGrid1ToGrid2(double grid1[][size],double grid2[][size]);
+void initializeErrorMatrix(double errorMatrix[][size], int);
+double calculateErrorMatrixAndReturnMaxError(double currentGrid[][size],double previousGrid[][size],double errorGrid[][size]);
 
 
 int main(int argc,char ** argv){
   int id,ntasks;
 
   double grid[size][size];
+  double previousGrid[size][size];
+  double errorGrid[size][size];
+  double maxError;
   
   MPI_Init(&argc,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD,&id);
   MPI_Comm_size(MPI_COMM_WORLD,&ntasks);
-
   
   if(id==0){
     createGrid(size,grid);
-
+    initializeErrorMatrix(errorGrid,size);
     cout<<"initial print"<<endl;
     cout<<"\nID="<<id<<endl;
     printGrid(grid);
     cout<<"\n";
     askBoundaryConditions(grid);
   }
-  MPI_Bcast(grid,size*size,MPI_DOUBLE,0,MPI_COMM_WORLD);
-  /*   cout<<"\nID="<<id<<endl;
-       printGrid(grid);
-       cout<<"\n";*
-  */
-  //cout<<"initial grid"<<endl;
-  //printGrid(grid);
-  for(int i=0;i<100000;i++){
-    updateGridValues(grid,id,ntasks);
-  }
-  /*
-    cout<<"final grid"<<endl;
-    cout<<"\nID="<<id<<endl;
+  if(id==0){
+    copyGrid1ToGrid2(grid,previousGrid);
     printGrid(grid);
-    cout<<"\n";
-  */
+    cout<<endl;
+    printGrid(previousGrid);
+    cout<<endl;
+    printGrid(errorGrid);
+    cout<<endl;
+  }
+  
+  MPI_Bcast(grid,size*size,MPI_DOUBLE,0,MPI_COMM_WORLD);
+
+  while(true){
+    if(id==0){
+    copyGrid1ToGrid2(grid,previousGrid);
+    }
+    
+    updateGridValues(grid,id,ntasks);
+
+    if(id==0){
+    maxError=calculateErrorMatrixAndReturnMaxError(grid,previousGrid,errorGrid);
+    }
+    MPI_Bcast(&maxError,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+    if(maxError<0.0001){
+      break;
+    }
+  }
+
   if(id==0){
     printGrid(grid);
+    cout<<endl;
+    cout<<"errors:"<<endl;
+    printGrid(errorGrid);
   }
   MPI_Finalize();
   return 0;
@@ -72,6 +93,37 @@ void createGrid(int N, double grid[][size]){
       grid[i][j]=guess;
     }
   }
+}
+
+void initializeErrorMatrix(double errorMatrix[][size], int size){
+  for(int i=0;i<size;i++){
+    for(int j=0;j<size;j++){
+      errorMatrix[i][j]=0;
+    }
+  }
+}
+
+void copyGrid1ToGrid2(double grid1[][size],double grid2[][size]){
+  for(int i=0;i<size;i++){
+    for(int j=0;j<size;j++){
+      grid2[i][j]=grid1[i][j];
+    }
+  }
+  
+}
+
+double calculateErrorMatrixAndReturnMaxError(double currentGrid[][size],double previousGrid[][size], double errorGrid[][size]){
+  double maxError=0;
+  for(int i=1;i<size-1;i++){
+    for(int j=1;j<size-1;j++){
+      errorGrid[i][j]=abs((currentGrid[i][j]-previousGrid[i][j])/currentGrid[i][j]);
+      if(errorGrid[i][j]>maxError){
+	maxError=errorGrid[i][j];
+      
+      }
+    }
+  }
+    return maxError;
 }
 
 void printGrid(double grid[][size]){
@@ -191,24 +243,16 @@ void calculateRedDots(double newGrid[][size], int id, int ntasks){
   } else if(id==ntasks-1){
     N-=1;
   }
-  //cout<<"red:"<<"id="<<id<<", n="<<n<<", N="<<N<<endl;
   double gamma=1;
   for(int i=n;i<N;i++){
-    //cout<<id<<endl;
-    //cout<<"id="<<id<<", i="<<i<<", n="<<n<<", N="<<N<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
-      //cout<<id<<endl;
       for(int j=2;j<size-1;j+=2){
-	//cout<<"ida="<<id<<", old:"<<newGrid[i][j]<<endl;
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
-	//cout<<"ida="<<id<<", new:"<<newGrid[i][j]<<endl;
       }
     } else{
       for(int j=1;j<size-1;j+=2){
-	//cout<<"idb="<<id<<", old:"<<newGrid[i][j]<<endl;
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
-	//cout<<"idb="<<id<<", new:"<<newGrid[i][j]<<endl;
       }
     }
   }
@@ -232,10 +276,8 @@ void calculateBlackDots(double newGrid[][size], int id, int ntasks){
   } else if(id==ntasks-1){
     N-=1;
   }
-    //cout<<"black:"<<"id="<<id<<", N="<<N<<", n="<<n<<endl;
   double gamma=1;
   for(int i=n;i<N;i++){
-    //cout<<id<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
       for(int j=1;j<size-1;j+=2){
@@ -287,9 +329,6 @@ void receiveDots(double newGrid[][size], double temp[][size],int senderID){
 }
 
 void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int senderID, int ntasks){
-  /* int N=(senderID+1)*size/ntasks;
-     int n=1+(senderID*size/ntasks);*/
-
 
    int N=(senderID+1)*size/ntasks;
   int n=(senderID*size/ntasks);
@@ -298,7 +337,6 @@ void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int
   }
   
   for(int i=n;i<N;i++){
-    //	cout<<i<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
       for(int j=2;j<size-1;j+=2){
@@ -313,8 +351,6 @@ void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int
 }
 
 void updateBlackDotsOnRootProcess(double newGrid[][size], double temp[][size], int senderID, int ntasks){
-  /* int N=(senderID+1)*size/ntasks;
-     int n=1+(senderID*size/ntasks);*/
 
      int N=(senderID+1)*size/ntasks;
   int n=(senderID*size/ntasks);
