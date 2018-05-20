@@ -4,7 +4,7 @@
 #include "mpi.h"
 
 using namespace std;
-int const size=10;
+int const size=6;
 
 //function prototypes
 void createGrid(int, double grid[][size]);
@@ -47,7 +47,7 @@ int main(int argc,char ** argv){
   */
   //cout<<"initial grid"<<endl;
   //printGrid(grid);
-  for(int i=0;i<1000;i++){
+  for(int i=0;i<100000;i++){
     updateGridValues(grid,id,ntasks);
   }
   /*
@@ -139,6 +139,7 @@ void askBoundaryConditions(double grid[][size]){
 
   
   }
+  cout<<endl;
 }
 
 
@@ -184,17 +185,30 @@ void calculateRedDots(double newGrid[][size], int id, int ntasks){
 
 
   N=(id+1)*size/ntasks;
-  int n=1+(id*size/ntasks);
+  int n=(id*size/ntasks);
+  if(id==0){
+    n+=1;
+  } else if(id==ntasks-1){
+    N-=1;
+  }
+  //cout<<"red:"<<"id="<<id<<", n="<<n<<", N="<<N<<endl;
   double gamma=1;
-  for(int i=n;i<N-1;i++){
+  for(int i=n;i<N;i++){
+    //cout<<id<<endl;
+    //cout<<"id="<<id<<", i="<<i<<", n="<<n<<", N="<<N<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
-      for(int j=n+1;j<N-1;j+=2){
+      //cout<<id<<endl;
+      for(int j=2;j<size-1;j+=2){
+	//cout<<"ida="<<id<<", old:"<<newGrid[i][j]<<endl;
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	//cout<<"ida="<<id<<", new:"<<newGrid[i][j]<<endl;
       }
     } else{
-      for(int j=n;j<N-1;j+=2){
+      for(int j=1;j<size-1;j+=2){
+	//cout<<"idb="<<id<<", old:"<<newGrid[i][j]<<endl;
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	//cout<<"idb="<<id<<", new:"<<newGrid[i][j]<<endl;
       }
     }
   }
@@ -212,17 +226,23 @@ void calculateBlackDots(double newGrid[][size], int id, int ntasks){
   }
 
   N=(id+1)*size/ntasks;
-  int n=1+(id*size/ntasks);
-  
+  int n=(id*size/ntasks);
+    if(id==0){
+    n+=1;
+  } else if(id==ntasks-1){
+    N-=1;
+  }
+    //cout<<"black:"<<"id="<<id<<", N="<<N<<", n="<<n<<endl;
   double gamma=1;
-  for(int i=n;i<N-1;i++){
+  for(int i=n;i<N;i++){
+    //cout<<id<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
-      for(int j=n;j<N-1;j+=2){
+      for(int j=1;j<size-1;j+=2){
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
       }
     }else{
-      for(int j=n+1;j<N-1;j+=2){
+      for(int j=2;j<size-1;j+=2){
 	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
       }
       
@@ -267,17 +287,25 @@ void receiveDots(double newGrid[][size], double temp[][size],int senderID){
 }
 
 void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int senderID, int ntasks){
-  int N=(senderID+1)*size/ntasks;
-  int n=1+(senderID*size/ntasks);
-  for(int i=n;i<N-1;i++){
+  /* int N=(senderID+1)*size/ntasks;
+     int n=1+(senderID*size/ntasks);*/
+
+
+   int N=(senderID+1)*size/ntasks;
+  int n=(senderID*size/ntasks);
+   if(senderID==ntasks-1){
+    N-=1;
+  }
+  
+  for(int i=n;i<N;i++){
     //	cout<<i<<endl;
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
-      for(int j=n+1;j<N-1;j+=2){
+      for(int j=2;j<size-1;j+=2){
 	newGrid[i][j]=temp[i][j];
       }
     } else{
-      for(int j=n;j<N-1;j+=2){
+      for(int j=1;j<size-1;j+=2){
 	newGrid[i][j]=temp[i][j];
       }
     }
@@ -285,16 +313,24 @@ void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int
 }
 
 void updateBlackDotsOnRootProcess(double newGrid[][size], double temp[][size], int senderID, int ntasks){
-  int N=(senderID+1)*size/ntasks;
-  int n=1+(senderID*size/ntasks);
-  for(int i=n;i<N-1;i++){
+  /* int N=(senderID+1)*size/ntasks;
+     int n=1+(senderID*size/ntasks);*/
+
+     int N=(senderID+1)*size/ntasks;
+  int n=(senderID*size/ntasks);
+   if(senderID==ntasks-1){
+    N-=1;
+  }
+
+  
+  for(int i=n;i<N;i++){
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
-      for(int j=n+1;j<N-1;j+=2){
+      for(int j=1;j<size-1;j+=2){
 	newGrid[i][j]=temp[i][j];
       }
     } else{
-      for(int j=n;j<N-1;j+=2){
+      for(int j=2;j<size-1;j+=2){
 	newGrid[i][j]=temp[i][j];
       }
     }
