@@ -36,6 +36,16 @@ int main(int argc,char ** argv){
   MPI_Init(&argc,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD,&id);
   MPI_Comm_size(MPI_COMM_WORLD,&ntasks);
+
+  //check that size is divisible with the number of processors
+  if(size%ntasks!=0){
+    if(id==0){
+    cout<<"The size of the array must be divisible with the number of processors used"<<endl;
+    cout<<"The size of the current array is "<<size<<endl;
+    cout<<"Run the program again with different number of processors"<<endl;
+    }
+    return 1;
+  }
   
   if(id==0){
     createGrid(size,grid);
