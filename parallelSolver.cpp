@@ -3,17 +3,18 @@
 #include <vector>
 #include "mpi.h"
 #include <cmath>
+#include <ctime>
 
 using namespace std;
-int const size=66;
+int const size=2*2*2*2*4*4;
 
 //function prototypes
 void createGrid(int, double grid[][size]);
 void printGrid(double grid[][size]);
 void askBoundaryConditions(double grid[][size]);
-void updateGridValues(double grid[][size], int, int);
-void calculateRedDots(double grid[][size],int, int);
-void calculateBlackDots(double grid[][size], int, int);
+void updateGridValues(double grid[][size], int, int, double);
+void calculateRedDots(double grid[][size],int, int, double);
+void calculateBlackDots(double grid[][size], int, int, double);
 void updateRedDots(double newGrid[][size],int, int);
 void updateBlackDots(double newGrid[][size],int, int);
 void sendDots(double newGrid[][size], int);
@@ -22,6 +23,7 @@ void updateRedDotsOnRootProcess(double newGrid[][size], double temp[][size], int
 void updateBlackDotsOnRootProcess(double newGrid[][size], double temp[][size], int, int);
 void copyGrid1ToGrid2(double grid1[][size],double grid2[][size]);
 void initializeErrorMatrix(double errorMatrix[][size], int);
+double g(int,int);
 double calculateErrorMatrixAndReturnMaxError(double currentGrid[][size],double previousGrid[][size],double errorGrid[][size]);
 
 
@@ -32,17 +34,31 @@ int main(int argc,char ** argv){
   double previousGrid[size][size];
   double errorGrid[size][size];
   double maxError;
-  
+  double gamma=0.95;
+  double convergenceCriterion=0.00001;
+  clock_t t1,t2;
+  bool printOn=0;
+
+
   MPI_Init(&argc,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD,&id);
   MPI_Comm_size(MPI_COMM_WORLD,&ntasks);
 
+    if(id==0){
+    cout<<"press 1 to print grid values, or 0 to disable printing:"<<endl;
+    char val;
+    cin>>val;
+    if(val=='1'){
+      printOn=1;
+    }
+  }
+
   //check that size is divisible with the number of processors
   if(size%ntasks!=0){
     if(id==0){
-    cout<<"The size of the array must be divisible with the number of processors used"<<endl;
-    cout<<"The size of the current array is "<<size<<endl;
-    cout<<"Run the program again with different number of processors"<<endl;
+      cout<<"The size of the array must be divisible with the number of processors used"<<endl;
+      cout<<"The size of the current array is "<<size<<endl;
+      cout<<"Run the program again with different number of processors"<<endl;
     }
     return 1;
   }
@@ -50,45 +66,51 @@ int main(int argc,char ** argv){
   if(id==0){
     createGrid(size,grid);
     initializeErrorMatrix(errorGrid,size);
-    cout<<"initial print"<<endl;
-    cout<<"\nID="<<id<<endl;
-    printGrid(grid);
+    if(printOn){
+      cout<<"initial print"<<endl;
+      cout<<"\nID="<<id<<endl;
+      printGrid(grid);
+    }
     cout<<"\n";
     askBoundaryConditions(grid);
-  }
-  if(id==0){
     copyGrid1ToGrid2(grid,previousGrid);
+    if(printOn){
     printGrid(grid);
-    cout<<endl;
-    printGrid(previousGrid);
-    cout<<endl;
-    printGrid(errorGrid);
-    cout<<endl;
+      cout<<endl;
+      printGrid(previousGrid);
+      cout<<endl;
+      printGrid(errorGrid);
+      cout<<endl;
+    }
   }
   
   MPI_Bcast(grid,size*size,MPI_DOUBLE,0,MPI_COMM_WORLD);
-
+  t1=clock();
   while(true){
     if(id==0){
     copyGrid1ToGrid2(grid,previousGrid);
     }
     
-    updateGridValues(grid,id,ntasks);
+    updateGridValues(grid,id,ntasks,gamma);
 
     if(id==0){
     maxError=calculateErrorMatrixAndReturnMaxError(grid,previousGrid,errorGrid);
     }
     MPI_Bcast(&maxError,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-    if(maxError<0.0001){
+    if(maxError<convergenceCriterion){
       break;
     }
   }
+  t2=clock();
 
   if(id==0){
+    if(printOn){
     printGrid(grid);
     cout<<endl;
     cout<<"errors:"<<endl;
     printGrid(errorGrid);
+    }
+    cout<<"CPU time: "<<(double)(t2-t1)/CLOCKS_PER_SEC<<endl;
   }
   MPI_Finalize();
   return 0;
@@ -205,7 +227,7 @@ void askBoundaryConditions(double grid[][size]){
 }
 
 
-void updateGridValues(double newGrid[][size], int id, int ntasks){
+void updateGridValues(double newGrid[][size], int id, int ntasks, double gamma){
 
   int N=size;
   double oldGrid[size][size];
@@ -221,20 +243,20 @@ void updateGridValues(double newGrid[][size], int id, int ntasks){
     newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
     }
     }*/
-  calculateRedDots(newGrid, id, ntasks);
+  calculateRedDots(newGrid, id, ntasks, gamma);
   updateRedDots(newGrid,id, ntasks);
 
   
 
   MPI_Bcast(newGrid,size*size,MPI_DOUBLE,0,MPI_COMM_WORLD);
   
-  calculateBlackDots(newGrid, id, ntasks);
+  calculateBlackDots(newGrid, id, ntasks, gamma);
   updateBlackDots(newGrid,id,ntasks);
     
   MPI_Bcast(newGrid,size*size,MPI_DOUBLE,0,MPI_COMM_WORLD);
 }
 
-void calculateRedDots(double newGrid[][size], int id, int ntasks){
+void calculateRedDots(double newGrid[][size], int id, int ntasks, double gamma){
 
   int N=size;
   double oldGrid[size][size];
@@ -253,23 +275,23 @@ void calculateRedDots(double newGrid[][size], int id, int ntasks){
   } else if(id==ntasks-1){
     N-=1;
   }
-  double gamma=1;
+  //double gamma=1;
   for(int i=n;i<N;i++){
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
       for(int j=2;j<size-1;j+=2){
-	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1])-(gamma/(4.0*size))*g(i,j);
       }
     } else{
       for(int j=1;j<size-1;j+=2){
-	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1])-(gamma/(4.0*size))*g(i,j);
       }
     }
   }
 
 }
 
-void calculateBlackDots(double newGrid[][size], int id, int ntasks){
+void calculateBlackDots(double newGrid[][size], int id, int ntasks, double gamma){
 
   int N=size;
   double oldGrid[size][size];
@@ -286,16 +308,16 @@ void calculateBlackDots(double newGrid[][size], int id, int ntasks){
   } else if(id==ntasks-1){
     N-=1;
   }
-  double gamma=1;
+    //double gamma=1;
   for(int i=n;i<N;i++){
     //go through every row (every i) every other column (j jumps by two and starts from 1 or 2, depending on the row
     if(i%2==0){
       for(int j=1;j<size-1;j+=2){
-	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1])-(gamma/(4.0*size))*g(i,j);
       }
     }else{
       for(int j=2;j<size-1;j+=2){
-	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1]);
+	newGrid[i][j]=(1-gamma)*oldGrid[i][j]+(gamma/4)*(oldGrid[i+1][j]+newGrid[i-1][j]+oldGrid[i][j+1]+newGrid[i][j-1])-(gamma/(4.0*size))*g(i,j);
       }
       
     }
@@ -382,6 +404,12 @@ void updateBlackDotsOnRootProcess(double newGrid[][size], double temp[][size], i
     }
   }
       
+}
+
+double g(int i,int j){
+  double x=(double)i/size;
+  double y=(double)j/size;
+  return x*y;
 }
 
 
