@@ -4,9 +4,11 @@
 #include "mpi.h"
 #include <cmath>
 #include <ctime>
+#include <iomanip>
 
 using namespace std;
-int const size=2*2*2*2*4*4;
+//using std::setw;
+int const size=15;
 
 //function prototypes
 void createGrid(int, double grid[][size]);
@@ -75,10 +77,9 @@ int main(int argc,char ** argv){
     askBoundaryConditions(grid);
     copyGrid1ToGrid2(grid,previousGrid);
     if(printOn){
-    printGrid(grid);
-      cout<<endl;
-      printGrid(previousGrid);
-      cout<<endl;
+      cout<<"Boundary values added:"<<endl;
+      printGrid(grid);
+      cout<<"Initial error Grid:"<<endl;
       printGrid(errorGrid);
       cout<<endl;
     }
@@ -105,6 +106,7 @@ int main(int argc,char ** argv){
 
   if(id==0){
     if(printOn){
+      cout<<"Final solved grid:"<<endl;
     printGrid(grid);
     cout<<endl;
     cout<<"errors:"<<endl;
@@ -163,7 +165,7 @@ void printGrid(double grid[][size]){
   for(int i=0;i<N;i++){
     for(int j=0;j<N;j++){
 
-      cout<<grid[i][j]<<"         ";
+      cout<<left<<setw(13)<<grid[i][j]<<setw(1)<<" ";
     }
     cout<<"\n";
   }
