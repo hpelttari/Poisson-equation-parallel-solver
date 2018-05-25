@@ -5,6 +5,7 @@
 #include <cmath>
 #include <ctime>
 #include <iomanip>
+#include <fstream>
 
 using namespace std;
 //using std::setw;
@@ -27,6 +28,7 @@ void copyGrid1ToGrid2(double grid1[][size],double grid2[][size]);
 void initializeErrorMatrix(double errorMatrix[][size], int);
 double g(int,int);
 double calculateErrorMatrixAndReturnMaxError(double currentGrid[][size],double previousGrid[][size],double errorGrid[][size]);
+void writeGridToFile(double grid[][size], ofstream file);
 
 
 int main(int argc,char ** argv){
@@ -40,20 +42,11 @@ int main(int argc,char ** argv){
   double convergenceCriterion=0.00001;
   clock_t t1,t2;
   bool printOn=0;
-
+  ofstream file;
 
   MPI_Init(&argc,&argv);
   MPI_Comm_rank(MPI_COMM_WORLD,&id);
   MPI_Comm_size(MPI_COMM_WORLD,&ntasks);
-
-    if(id==0){
-    cout<<"press 1 to print grid values, or 0 to disable printing:"<<endl;
-    char val;
-    cin>>val;
-    if(val=='1'){
-      printOn=1;
-    }
-  }
 
   //check that size is divisible with the number of processors
   if(size%ntasks!=0){
@@ -65,13 +58,36 @@ int main(int argc,char ** argv){
     return 1;
   }
   
-  if(id==0){
-    createGrid(size,grid);
-    initializeErrorMatrix(errorGrid,size);
-    if(printOn){
-      cout<<"initial print"<<endl;
-      cout<<"\nID="<<id<<endl;
-      printGrid(grid);
+    if(id==0){
+    cout<<"press 1 to print grid values, or 0 to disable printing:"<<endl;
+    char val;
+    cin>>val;
+    if(val=='1'){
+      printOn=1;
+    }
+  }
+
+  
+    if(id==0){
+      createGrid(size,grid);
+      initializeErrorMatrix(errorGrid,size);
+
+      //write the initial grid to file
+      file.open("grid.txt");
+      file<<"Initial grid:\n";
+      for(int i=0;i<size;i++){
+	for(int j=0;j<size;j++){
+	  file<<left<<setw(10)<<grid[i][j]<<" ";
+	  //cout<<left<<setw(13)<<grid[i][j]<<setw(1)<<" ";
+	}
+	file<<"\n";
+      }
+      file<<"\n";
+    
+      if(printOn){
+	cout<<"initial print"<<endl;
+	cout<<"\nID="<<id<<endl;
+	printGrid(grid);
     }
     cout<<"\n";
     askBoundaryConditions(grid);
@@ -112,6 +128,19 @@ int main(int argc,char ** argv){
     cout<<"errors:"<<endl;
     printGrid(errorGrid);
     }
+    //write the solved grid to file
+    file<<"Solved Grid:\n";
+    for(int i=0;i<size;i++){
+      for(int j=0;j<size;j++){
+	file<<left<<setw(10)<<grid[i][j]<<" ";
+      }
+      file<<"\n";
+    }
+    file<<"\n";
+
+    //write cpu time to file and print it
+    file<<"CPU time: "<<(double)(t2-t1)/CLOCKS_PER_SEC;
+    file.close();
     cout<<"CPU time: "<<(double)(t2-t1)/CLOCKS_PER_SEC<<endl;
   }
   MPI_Finalize();
@@ -412,6 +441,16 @@ double g(int i,int j){
   double x=(double)i/size;
   double y=(double)j/size;
   return x*y;
+}
+
+void writeGridToFile(double grid[][size], ofstream file){
+  for(int i=0;i<size;i++){
+    for(int j=0;j<size;j++){
+      file<<grid[i][j]<<" ";
+    }
+    file<<"\n";
+  }
+  file<<"\n";
 }
 
 
